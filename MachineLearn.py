@@ -22,7 +22,7 @@ INIT_LOOP = True
 
 mousepos = (0, 0)
 
-LIFESPAN = 300  # frames\
+LIFESPAN = 300  # frames
 GENESPAN = LIFESPAN/10
 
 GEN_SIZE = 10
@@ -55,18 +55,22 @@ def collision(obj1, obj2):
 def distsq(pos1, pos2):
     return (pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2
 
-
+# Obstacle class
+# This is a solid object the rockets cannot pass through
 class Obstacle(object):
 
     def __init__(self, x, y, width, height):
         self.collision_box = [self.x, self.y, self.width, self.height] = [x, y, width, height]
 
 
+# Goal class
+# This is where the rockets need to go. There can be more than one, and they need to be reached in order
 class Goal(object):
 
     def __init__(self, x, y, width=20, height=20):
         self.collision_box = [self.x, self.y, self.width, self.height] = [x, y, width, height]
 
+# Goals that are used if INIT_LOOP is False, otherwise the rockets will have nowhere to go!
 
 GOAL1 = Goal(400, 400)
 GOAL2 = Goal(600, 400)
@@ -76,7 +80,6 @@ GOAL4 = Goal(400, 600)
 if not INIT_LOOP:
     ROCKET_GOAL_LIST = [GOAL1, GOAL2, GOAL3, GOAL4]
     OBSTACLE_LIST = [Obstacle(430, 330, 160, 360)]
-    # [Obstacle(600, -700, 200, 750), Obstacle(600, 100, 200, 500), Obstacle(600, 650, 200, height)]
 else:
     ROCKET_GOAL_LIST = []
     OBSTACLE_LIST = []
@@ -98,24 +101,32 @@ class Physics(object):
         self.obstacles = obstacles
 
     def move(self):
+        
+        # basic moving simulation
 
         self.xv += self.xa
         self.yv += self.ya
-
+        
+        # we need to check if we do not collide with an obstacle after moving
+        # for this we need to know both the old and the new coordinates, and allow movement in
+        # the x- or y-direction when wanted
         new_x = self.x + self.xv
         new_y = self.y + self.yv
 
         old_x = int(self.x)
         old_y = int(self.y)
-
+        
         for obstacle in self.obstacles:
             if collision([new_x, new_y, self.width, self.height], obstacle.collision_box):
+                # if we collide because of the change in x, do not allow this, but set the 
+                # x-coordinate accordingly
                 if collision([new_x, old_y, self.width, self.height], obstacle.collision_box):
                     if self.x < obstacle.x:
                         new_x = obstacle.x - self.width
                     else:
                         new_x = obstacle.x + obstacle.width
                     self.xv = 0
+                # the same for the y-direction
                 if collision([old_x, new_y, self.width, self.height], obstacle.collision_box):
                     if self.y < obstacle.y:
                         new_y = obstacle.y - self.height
@@ -175,7 +186,10 @@ class DNA(object):
         # counting variables for determining reading position in DNA
         self.currentgene = 0
         self.currentframe = 0
-
+        
+        # if the previous generation did not reach any goals, this is the goalgenes_frames list
+        # it contains the information about at what gene and what frame of that gene certain goals
+        # have been reached
         if goalgenes_frames is None:
             self.goalgenes_frames = [(0, 0)]
         else:
@@ -197,7 +211,6 @@ class DNA(object):
     def mutate(self, stage, randomness=1.):
         # Make genes mutate slightly or very much depending on randomness
         # randomness 1. is completely new genome, randomness 0. is no mutation
-        # TODO: make later genes mutate more
         # TODO: create "DNA stages", splice up DNA in parts to mutate separately (change length etc)
         try:
             start = self.goalgenes_frames[stage][0]
@@ -351,16 +364,14 @@ class Generation(object):
                 unit.score += 1000 - 10*self.frame - distsq((unit.x, unit.y),
                                                             unit.goal_list[unit.goal_no].collision_box[:2])/1000
 
-        # determine order for score
+        # determine order depending on score
         indices = range(GEN_SIZE)
         ranked_indices = sorted(indices, reverse=True, key=lambda i: self.units[i].score)
         ranked_rockets = [self.units_origin[i] for i in ranked_indices]
         for i in range(GEN_SIZE):
             ranked_rockets[i].DNA.goalgenes_frames = copy.copy(self.units[ranked_indices[i]].DNA.goalgenes_frames)
 
-        print "ORIGINAL DNA", ranked_rockets[0].DNA.goalgenes_frames
-
-        # show best performing rocket in separate visual loop
+        # show best performing rocket in separate visual loop if SHOW_BEST is True
         show_best = SHOW_BEST
         sim_frame = 0
         sim_fps = fps
@@ -427,11 +438,12 @@ class Generation(object):
             self.lifespan = LIFESPAN
             self.randomness = RANDOM_FACTOR
             self.prev_change_gen = self.number
-
+        
+        # report the max score and the last generation it changed in
         print self.max_score, self.prev_change_gen
 
         # recreate all units depending on score
-        # use preset ratio's to eliminate RNG
+        # use preset ratio's to eliminate RNG for efficiency
         self.units = []
         for i in [0]*(GEN_SIZE//2) + [1]*(GEN_SIZE//4) + [2]*(GEN_SIZE//8) + [3]*(GEN_SIZE/16) + [4]*(GEN_SIZE//16):
             self.units.append(Rocket(dna=copy.deepcopy(ranked_rockets[i].DNA.genes),
@@ -443,10 +455,8 @@ class Generation(object):
                                      goalgenes_frames=copy.copy(ranked_rockets[0].DNA.goalgenes_frames)))
 
         # mutate all rockets, except one copy of the best performing one
-        # TODO: Automate randomness
-        #   - seems done
         for unit in self.units[1:]:
-            unit.DNA.mutate(self.stage, randomness=self.randomness)  # random.expovariate(40))  # 0.05 seems good
+            unit.DNA.mutate(self.stage, randomness=self.randomness)
 
         # create a copy of the new generation
         self.units_origin = copy.deepcopy(self.units)
@@ -459,40 +469,56 @@ class Generation(object):
 
 GEN = Generation()
 
-# TODO: CREATE INITLOOP
+# Initialization loop
+# In this loop you can:
+#   - Add goals by left clicking
+#   - Add obstacles by selecting an area with right click
+#   - Undo the last action by pressing backspace
+#   - Start the simulation by pressing space
 actions_performed = []
 init_pos = (-1, -1)
 min_x, min_y, w, h = 0, 0, 0, 0
 
 while INIT_LOOP:
-
+    
     mousepos = pygame.mouse.get_pos()
+    # determine values for rectangle indicating the currently selected area
+    # for an obstacle
     if init_pos != (-1, -1):
         min_x = min(init_pos[0], mousepos[0])
         min_y = min(init_pos[1], mousepos[1])
         w = abs(init_pos[0] - mousepos[0])
         h = abs(init_pos[1] - mousepos[1])
-
+    
+    # Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             INIT_LOOP = False
             GAME_LOOP = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
+                # ADDING GOALS
+                # Not allowing goals inside of obstacles
                 if not any(collision(obstacle.collision_box,
                                      [mousepos[0], mousepos[1], 20, 20]) for obstacle in OBSTACLE_LIST):
                     ROCKET_GOAL_LIST.append(Goal(mousepos[0], mousepos[1]))
+                    # record the last performed action
                     actions_performed.append("GOAL")
             elif event.button == 3:
+                # ADDING OBSTACLES
                 if init_pos == (-1, -1):
                     init_pos = mousepos
                 else:
+                    # Not allowing obstacles around goals
                     if not any(collision(goal.collision_box, [min_x, min_y, w, h]) for goal in ROCKET_GOAL_LIST):
                         OBSTACLE_LIST.append(Obstacle(min_x, min_y, w, h))
+                        # record the last performed action
                         actions_performed.append("OBSTACLE")
+                    # reset indicator variables
                     init_pos = (-1, -1)
                     min_x, min_y, w, h = 0, 0, 0, 0
-
+                    
+        # Starting loop and undoing
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 if len(ROCKET_GOAL_LIST) > 0:
@@ -516,13 +542,16 @@ while INIT_LOOP:
         screen.blit(myfont.render("{0}".format(i), True, (10, 10, 10)), (goal.x, goal.y))
     for ob in OBSTACLE_LIST:
                 pygame.draw.rect(screen, (0, 0, 0), ob.collision_box)
-
+    
+    # indicate currently selected area for obstacle
     pygame.draw.rect(screen, (0, 0, 0), [min_x, min_y, w, h], 1)
 
     pygame.display.flip()
 
     clock.tick(fps)
 
+# Dictionaries to store the text we blit for efficiency
+# (rendering text takes a long time)
 label_blits = {
     "GENERATION": myfont.render("GENERATION:", True, (10, 10, 10)),
     "FRAME": myfont.render("FRAME:", True, (10, 10, 10)),
@@ -531,6 +560,7 @@ label_blits = {
     "FPS": myfont.render("FPS:", True, (10, 10, 10))
 }
 
+# attributes of GEN corresponding to the labels
 label_vals = {
     "GENERATION": "number",
     "FRAME": "frame",
@@ -539,13 +569,17 @@ label_vals = {
     "FPS": "FPS"
 }
 
+# rendered numbers that were blitted before
 number_blits = {}
 
+# a list of keys we want to plot
+# remove any you don't want to see
 keys = ["GENERATION", "FRAME", "RANDOMNESS", "STAGE", "FPS"]
 
 # MAIN LOOP
 while GAME_LOOP:
-
+    
+    # event handling
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             GAME_LOOP = False
@@ -563,7 +597,7 @@ while GAME_LOOP:
 
     screen.fill((255, 255, 255))
 
-    # Update generation, then draw goals after
+    # Update generation, then draw goals and obstacles after
     GEN.update()
     for i in range(len(ROCKET_GOAL_LIST)):
         goal = ROCKET_GOAL_LIST[i]
@@ -588,7 +622,7 @@ while GAME_LOOP:
 
     pygame.display.flip()
 
-    # we might as well go to the next generation if 10% had finished
+    # we might as well go to the next generation if 10% have finished
     if GEN.number_finished > GEN_SIZE/10.:
         GEN.next_gen()
 
