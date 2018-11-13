@@ -1,4 +1,4 @@
-# Machine-Learning
+# Evolution
 A basic machine learning program I wrote in Python
 
 In this project, I simulate "Rockets" (squares) that travel around. They need to reach goals (in a certain order) and avoid obstacles. To do this, they have DNA, containing information on what direction they will travel each frame. Each generation, the best performing rockets are selected, copied and mutated randomly in order to improve the maximum score reached. This way they (hopefully) reach the final goal. 
